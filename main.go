@@ -8,7 +8,7 @@ import (
 
 func main() {
 	ServeMux := http.NewServeMux()
-	ServeMux.Handle("/", http.FileServer(http.Dir(".")))
+	ServeMux.Handle("/", http.StripPrefix("/app", http.FileServer(http.Dir("."))))
 	ServeMux.HandleFunc("/healthz", readiness)
 	server := &http.Server{
 		Handler: ServeMux,
