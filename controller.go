@@ -156,6 +156,47 @@ func (cfg *apiConfig) getAllChirps (res http.ResponseWriter, req *http.Request) 
 	res.Write(jsonResponse)
 }
 
+func (cfg *apiConfig) getChirp(res http.ResponseWriter, req *http.Request) {
+	path := req.PathValue("chirpID")
+	chirpID, err := uuid.Parse(path)
+	if err != nil {
+		log.Printf("invalid uuid: %s", chirpID)
+		jsonError, err := json.Marshal(error{
+			Error: fmt.Sprintf("Invalid UUID %s", err),
+		})
+		if err != nil {
+			res.WriteHeader(500)
+			return
+		}
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(500)
+		res.Write(jsonError)
+		return
+	}
+	chirp, err := cfg.db.GetChirp(req.Context(), uuid.UUID(chirpID))
+	if err != nil {
+		if len(chirp.Body) == 0 {
+			log.Printf("could not find chirp")
+			res.WriteHeader(404)
+			res.Write([]byte("404 Not Found"))
+		} else {
+			log.Printf("error getting chirp: %s", err)
+			res.WriteHeader(500)
+		}
+		return
+	}
+	response := Chirp(chirp)
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		res.WriteHeader(500)
+		return
+	}
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(200)
+	res.Write(jsonResponse)
+}
+
 func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
 	type parameters struct {
 		Email string `json:"email"`
