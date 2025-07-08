@@ -6,8 +6,12 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	// "strconv"
+
 )
+
+type error struct{
+	Error string `json:"error"`
+}
 
 func readiness(res http.ResponseWriter, _ *http.Request) {
 	res.WriteHeader(200)
@@ -42,9 +46,6 @@ func validateChirp(res http.ResponseWriter, req *http.Request) {
 	}
 	type valid struct{
 		Valid bool `json:"valid"`
-	}
-	type error struct{
-		Error string `json:"error"`
 	}
 	type cleanedBody struct{
 		CleanedBody string `json:"cleaned_body"`
@@ -122,4 +123,42 @@ func validateChirp(res http.ResponseWriter, req *http.Request) {
 	res.WriteHeader(200)
 	res.Write(data)
 
+}
+
+func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
+	type parameters struct {
+		Email string `json:"email"`
+	}
+	requestBody := parameters{}
+	decoder := json.NewDecoder(req.Body)
+	if err := decoder.Decode(&requestBody); err != nil {
+		log.Printf("Error decoding request body: %s", err)
+		res.WriteHeader(500)
+		return
+	}
+	user, err := cfg.db.CreateUser(req.Context(), requestBody.Email)
+	if err != nil {
+		log.Printf("Error creating user: %s", err)
+		jsonError, err := json.Marshal(error{
+			Error: fmt.Sprintf("error while creating user: %s", err),
+		})
+		if err != nil {
+			res.WriteHeader(500)
+			return
+		}
+		res.Header().Set("Content-Type", "application/json")
+		res.Write(jsonError)
+		res.WriteHeader(400)
+		return
+	}
+	responseBody := User(user)
+	jsonResponseBody, err := json.Marshal(responseBody)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		res.WriteHeader(500)
+		return
+	}
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(201)
+	res.Write(jsonResponseBody)
 }
