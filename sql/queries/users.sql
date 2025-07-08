@@ -4,3 +4,7 @@ VALUES (
     $1
 )
 RETURNING *;
+
+-- name: ResetUsers :one
+DELETE FROM users
+RETURNING *;

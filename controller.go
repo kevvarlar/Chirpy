@@ -34,7 +34,17 @@ func (cfg *apiConfig) metrics(res http.ResponseWriter, _ *http.Request) {
 	res.Write([]byte(metricsHtml))
 }
 
-func (cfg *apiConfig) reset(res http.ResponseWriter, _ *http.Request) {
+func (cfg *apiConfig) reset(res http.ResponseWriter, req *http.Request) {
+	if cfg.platform != "dev" {
+		res.WriteHeader(403)
+		res.Write([]byte("403 Forbidden"))
+		return
+	}
+	_, err := cfg.db.ResetUsers(req.Context())
+	if err != nil {
+		res.WriteHeader(500)
+		return
+	}
 	cfg.fileserverHits.Store(0)
 	res.WriteHeader(200)
 	res.Write([]byte("OK"))

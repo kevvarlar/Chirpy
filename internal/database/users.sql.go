@@ -28,3 +28,20 @@ func (q *Queries) CreateUser(ctx context.Context, email string) (User, error) {
 	)
 	return i, err
 }
+
+const resetUsers = `-- name: ResetUsers :one
+DELETE FROM users
+RETURNING id, created_at, updated_at, email
+`
+
+func (q *Queries) ResetUsers(ctx context.Context) (User, error) {
+	row := q.db.QueryRowContext(ctx, resetUsers)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Email,
+	)
+	return i, err
+}
