@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	// "strconv"
 )
 
@@ -45,6 +46,9 @@ func validateChirp(res http.ResponseWriter, req *http.Request) {
 	type error struct{
 		Error string `json:"error"`
 	}
+	type cleanedBody struct{
+		CleanedBody string `json:"cleaned_body"`
+	}
 
 	res.Header().Set("Content-Type", "application/json")
 	decoder := json.NewDecoder(req.Body)
@@ -75,14 +79,47 @@ func validateChirp(res http.ResponseWriter, req *http.Request) {
 		res.Write(jsonErr)
 		return
 	}
-	data, err := json.Marshal(valid{
+	profane := []string{
+		"kerfuffle",
+		"sharbert",
+		"fornax",
+	}
+	body := strings.Split(params.Body, " ")
+	isValid := valid{
 		Valid: true,
-	})
+	}
+	for i, w := range body {
+		check := strings.ToLower(w)
+		for _, p := range profane{
+			if check == p {
+				body[i] = "****"
+				isValid.Valid = false
+			}
+		}
+	}
+	cleaned := strings.Join(body, " ")
+	if !isValid.Valid {
+		data, err := json.Marshal(cleanedBody{
+			CleanedBody: cleaned,
+		})
+		if err != nil {
+			log.Printf("Error marshalling JSON: %s", err)
+			res.WriteHeader(500)
+			return
+		}
+
+		res.WriteHeader(200)
+		res.Write(data)
+		return
+	}
+	data, err := json.Marshal(isValid)
 	if err != nil {
 		log.Printf("Error marshalling JSON: %s", err)
 		res.WriteHeader(500)
 		return
 	}
+
 	res.WriteHeader(200)
 	res.Write(data)
+
 }
