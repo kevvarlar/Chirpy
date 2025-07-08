@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/kevvarlar/Chirpy/internal/database"
 )
 
 type error struct{
@@ -50,31 +52,17 @@ func (cfg *apiConfig) reset(res http.ResponseWriter, req *http.Request) {
 	res.Write([]byte("OK"))
 }
 
-func validateChirp(res http.ResponseWriter, req *http.Request) {
+func (cfg *apiConfig) createChirp(res http.ResponseWriter, req *http.Request) {
 	type parameters struct{
 		Body string `json:"body"`
-	}
-	type valid struct{
-		Valid bool `json:"valid"`
-	}
-	type cleanedBody struct{
-		CleanedBody string `json:"cleaned_body"`
+		UserID uuid.UUID `json:"user_id"`
 	}
 
-	res.Header().Set("Content-Type", "application/json")
 	decoder := json.NewDecoder(req.Body)
 	params := parameters{}
 	if err := decoder.Decode(&params); err != nil {
-		jsonErr, err := json.Marshal(error{
-			Error: "Error Decoding parameters",
-		})
-		if err != nil {
-			log.Printf("Error marshalling JSON: %s", err)
-			res.WriteHeader(500)
-			return
-		}
+		log.Printf("Error marshalling JSON: %s", err)
 		res.WriteHeader(500)
-		res.Write(jsonErr)
 		return
 	}
 	if len(params.Body) > 140 {
@@ -86,6 +74,7 @@ func validateChirp(res http.ResponseWriter, req *http.Request) {
 			res.WriteHeader(500)
 			return
 		}
+		res.Header().Set("Content-Type", "application/json")
 		res.WriteHeader(400)
 		res.Write(jsonErr)
 		return
@@ -96,42 +85,43 @@ func validateChirp(res http.ResponseWriter, req *http.Request) {
 		"fornax",
 	}
 	body := strings.Split(params.Body, " ")
-	isValid := valid{
-		Valid: true,
-	}
 	for i, w := range body {
 		check := strings.ToLower(w)
 		for _, p := range profane{
 			if check == p {
 				body[i] = "****"
-				isValid.Valid = false
 			}
 		}
 	}
-	cleaned := strings.Join(body, " ")
-	if !isValid.Valid {
-		data, err := json.Marshal(cleanedBody{
-			CleanedBody: cleaned,
+	cleanedBody := strings.Join(body, " ")
+	chirp, err := cfg.db.CreateChirp(req.Context(), database.CreateChirpParams{
+		Body: cleanedBody,
+		UserID: params.UserID,
+	})
+	if err != nil {
+		log.Printf("Error creating chirp: %s", err)
+		jsonError, err := json.Marshal(error{
+			Error: fmt.Sprintf("error while creating chirp: %s", err),
 		})
 		if err != nil {
-			log.Printf("Error marshalling JSON: %s", err)
 			res.WriteHeader(500)
 			return
 		}
-
-		res.WriteHeader(200)
-		res.Write(data)
+		res.Header().Set("Content-Type", "application/json")
+		res.Write(jsonError)
+		res.WriteHeader(400)
 		return
 	}
-	data, err := json.Marshal(isValid)
+	response := Chirp(chirp)
+	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		log.Printf("Error marshalling JSON: %s", err)
 		res.WriteHeader(500)
 		return
 	}
-
-	res.WriteHeader(200)
-	res.Write(data)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(201)
+	res.Write(jsonResponse)
 
 }
 
@@ -139,14 +129,14 @@ func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
 	type parameters struct {
 		Email string `json:"email"`
 	}
-	requestBody := parameters{}
+	params := parameters{}
 	decoder := json.NewDecoder(req.Body)
-	if err := decoder.Decode(&requestBody); err != nil {
+	if err := decoder.Decode(&params); err != nil {
 		log.Printf("Error decoding request body: %s", err)
 		res.WriteHeader(500)
 		return
 	}
-	user, err := cfg.db.CreateUser(req.Context(), requestBody.Email)
+	user, err := cfg.db.CreateUser(req.Context(), params.Email)
 	if err != nil {
 		log.Printf("Error creating user: %s", err)
 		jsonError, err := json.Marshal(error{
@@ -161,8 +151,8 @@ func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(400)
 		return
 	}
-	responseBody := User(user)
-	jsonResponseBody, err := json.Marshal(responseBody)
+	response := User(user)
+	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		log.Printf("Error marshalling JSON: %s", err)
 		res.WriteHeader(500)
@@ -170,5 +160,5 @@ func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
 	}
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(201)
-	res.Write(jsonResponseBody)
+	res.Write(jsonResponse)
 }
