@@ -108,8 +108,8 @@ func (cfg *apiConfig) createChirp(res http.ResponseWriter, req *http.Request) {
 			return
 		}
 		res.Header().Set("Content-Type", "application/json")
-		res.Write(jsonError)
 		res.WriteHeader(400)
+		res.Write(jsonError)
 		return
 	}
 	response := Chirp(chirp)
@@ -123,6 +123,37 @@ func (cfg *apiConfig) createChirp(res http.ResponseWriter, req *http.Request) {
 	res.WriteHeader(201)
 	res.Write(jsonResponse)
 
+}
+
+func (cfg *apiConfig) getAllChirps (res http.ResponseWriter, req *http.Request) {
+	response := []Chirp{}
+	chirps, err := cfg.db.GetAllChirps(req.Context())
+	if err != nil {
+		log.Printf("Error getting all chirps: %s", err)
+		jsonError, err := json.Marshal(error{
+			Error: fmt.Sprintf("Error getting all chirps: %s", err),
+		})
+		if err != nil {
+			res.WriteHeader(500)
+			return
+		}
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(500)
+		res.Write(jsonError)
+		return
+	}
+	for _, chirp := range chirps {
+		response = append(response, Chirp(chirp))
+	}
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error while marshalling response")
+		res.WriteHeader(500)
+		return
+	}
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(200)
+	res.Write(jsonResponse)
 }
 
 func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
