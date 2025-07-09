@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/kevvarlar/Chirpy/internal/auth"
 	"github.com/kevvarlar/Chirpy/internal/database"
 )
 
@@ -199,6 +200,7 @@ func (cfg *apiConfig) getChirp(res http.ResponseWriter, req *http.Request) {
 
 func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
 	type parameters struct {
+		Password string `json:"password"`
 		Email string `json:"email"`
 	}
 	params := parameters{}
@@ -208,7 +210,16 @@ func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(500)
 		return
 	}
-	user, err := cfg.db.CreateUser(req.Context(), params.Email)
+	hashedPassword, err := auth.HashPassword(params.Password)
+	if err != nil {
+		log.Printf("Error hashing password: %s", err)
+		res.WriteHeader(500)
+		return
+	}
+	user, err := cfg.db.CreateUser(req.Context(), database.CreateUserParams{
+		Email: params.Email,
+		HashedPassword: hashedPassword,
+	})
 	if err != nil {
 		log.Printf("Error creating user: %s", err)
 		jsonError, err := json.Marshal(error{
@@ -223,7 +234,11 @@ func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(400)
 		return
 	}
-	response := User(user)
+	response := User{}
+	response.ID = user.ID
+	response.CreatedAt = user.CreatedAt
+	response.UpdatedAt = user.UpdatedAt
+	response.Email = user.Email
 	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		log.Printf("Error marshalling JSON: %s", err)
@@ -232,5 +247,45 @@ func (cfg *apiConfig) createUser(res http.ResponseWriter, req *http.Request) {
 	}
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(201)
+	res.Write(jsonResponse)
+}
+
+func (cfg *apiConfig) login(res http.ResponseWriter, req *http.Request) {
+	type parameters struct {
+		Password string `json:"password"`
+		Email string `json:"email"`
+	}
+	params := parameters{}
+	decoder := json.NewDecoder(req.Body)
+	if err := decoder.Decode(&params); err != nil {
+		log.Printf("error while decoding request body")
+		res.WriteHeader(500)
+		return
+	}
+	user, err := cfg.db.GetUserByEmail(req.Context(), params.Email)
+	if err != nil {
+		res.WriteHeader(401)
+		res.Write([]byte("Incorrect email or password"))
+		return
+	}
+	err = auth.CheckPasswordHash(params.Password, user.HashedPassword)
+	if err != nil {
+		res.WriteHeader(401)
+		res.Write([]byte("Incorrect email or password"))
+		return
+	}
+	response := User{}
+	response.ID = user.ID
+	response.CreatedAt = user.CreatedAt
+	response.UpdatedAt = user.UpdatedAt
+	response.Email = user.Email
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling JSON: %s", err)
+		res.WriteHeader(500)
+		return
+	}
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(200)
 	res.Write(jsonResponse)
 }
